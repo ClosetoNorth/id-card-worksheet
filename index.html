@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head>
+		<meta charset="UTF-8">
+		<title>ID Card Worksheet</title>
+		<style>
+		  body {font-family: Monospace, Sans-Serif; max-width: 700px; margin: 40px auto; }
+		  .card { border: 2px solid #333; 
+		          padding: 20px; 
+		          background: #f9f9f9; 
+		          border-radius: 10px;
+  
+              background-image: url('https://image.slidesdocs.com/responsive-images/background/airplane-aircraft-colorful-education-child-powerpoint-background_3ada96b3fb__960_540.jpg');
+              background-size: cover;        
+              background-position: center;   
+              background-repeat: repeat;  
+  
+		  }
+		  .center-img {display: block; margin-left: auto; margin-right: auto; max-width:50%; height:auto;}
+      label { 
+        display: inline-block;  
+        width: 280px;  
+        margin-right: -10px;             
+        font-weight: bold;
+        vertical-align: middle;         
+        text-align: left;      
+      }
+      input, textarea { 
+        display: inline-block;          
+        width: 30%;                     
+        padding: 5px;
+        box-sizing: border-box;
+        vertical-align: middle;  
+      }
+     
+      .form-row {
+        display: flex;
+        align-items: center;
+        gap: 8px;               
+        margin: 12px 0;
+        flex-wrap: wrap;        
+      }
+      
+      .place-row label {
+        flex: 0 0 auto;        
+        font-weight: bold;
+        white-space: nowrap;    
+      }
+      
+      .place-row textarea {
+        flex: 1 1 20px;       
+        min-width: 10px;
+        padding: 6px 8px;
+        border: 1px solid #999;
+        border-radius: 4px;
+      }
+      
+      .place-row .fixed-text {
+        white-space: nowrap;
+        color: #555;
+      }
+  
+      /* Optional: mobile fallback → stack vertically */
+      @media (max-width: 500px) {
+        .form-row {
+          flex-direction: column;
+          align-items: flex-start;
+          gap: 6px;
+        }
+        
+        .place-row input {
+          width: 30%;
+        }
+      }
+      
+      button { display: block; margin-left: auto; margin-right: auto; margin-top: 30px; padding: 10px 20px; background: #4CAF50; color: white; border: none; cursor: pointer; }
+      button:hover { background: #45a049; }
+      #results { margin-top: 20px; padding: 15px; background: #fff3cd; border: 1px solid #ffeeba; border-radius: 5px; }
+      .error { color: red; font-weight: bold; }
+		</style>
+	</head>
+	<body>	
+	  <div class="card">
+	    <img src="https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcSLg__6S81P_1_yXgXXlgtWnbK6PmFKb5eVPA&s" class=center-img>
+	    
+      <h2>ID CARD</h2>
+    
+      <div class="form-row">
+        <label for="name">NAME: My name is</label>
+        <input type="text" id="name" placeholder="">
+      </div>
+      <div class="form-row">
+        <label for="country">COUNTRY: I am from</label>
+        <input type="text" id="country" placeholder="">
+      </div>
+      <div class="form-row">
+        <label for="nationality">NATIONALITY: I am</label>
+        <input type="text" id="nationality" placeholder="">
+      </div>
+      <div class="form-row">
+        <label for="food">FAMOUS FOOD: The famous food is</label>
+        <input type="text" id="food" placeholder="">
+      </div>
+      <div class="form-row place-row">
+        <label for="place">POPULAR PLACE:
+        <textarea id="place" rows="1" placeholder=""></textarea>
+        is a popular place.</label>
+      </div>
+      <div class="form-row place-row">
+        <label for="funfact">FUN FACT:
+        <textarea id="funfact" rows="1" placeholder=""></textarea>
+        is a sunny place. </label>
+      </div>
+        <button onclick="checkGrammar()">Submit</button>
+      </div>
+        <div id="results"></div>
+    </div> 
+  <script type="module">
+    import { lint } from 'https://cdn.jsdelivr.net/npm/harper.js@latest/+esm';
+  
+    async function checkGrammar() {
+      const resultsDiv = document.getElementById('results');
+      resultsDiv.innerHTML = '<p>Checking with Harper... (offline & private)</p>';
+  
+      // Collect texts (same as before)
+      const texts = [
+        document.getElementById('name').value,
+        document.getElementById('country').value,
+        document.getElementById('nationality').value,
+        document.getElementById('food').value,
+        document.getElementById('place').value,
+        document.getElementById('funfact').value
+      ].filter(t => t.trim() !== '');
+  
+      if (texts.length === 0) {
+        resultsDiv.innerHTML = '<p class="error">Please fill in at least one field!</p>';
+        return;
+      }
+  
+      const fullText = texts.join('\n\n'); // better for Harper (treat as paragraphs)
+  
+      try {
+        const issues = await lint(fullText); // This is the magic line — runs locally!
+  
+        if (issues.length === 0) {
+          resultsDiv.innerHTML = '<p style="color:green;">Perfect! No issues found. 🎉 (Harper check)</p>';
+          return;
+        }
+  
+        let html = '<p><strong>Harper found ' + issues.length + ' issue(s):</strong></p><ul>';
+        issues.forEach(issue => {
+          const snippet = fullText.substring(issue.span.start, issue.span.end);
+          const suggestions = issue.suggestions?.map(s => s.value).join(' or ') || 'Fix needed';
+          html += `<li><span class="error">${snippet}</span> → ${suggestions}<br><small>${issue.message}</small></li>`;
+        });
+        html += '</ul>';
+        resultsDiv.innerHTML = html;
+  
+      } catch (error) {
+        resultsDiv.innerHTML = '<p class="error">Harper failed to load or run. Try refreshing. (Error: ' + error.message + ')</p>';
+      }
+    }
+  
+    document.querySelector('button').onclick = checkGrammar;
+  </script>
+	</body>
+</html>
