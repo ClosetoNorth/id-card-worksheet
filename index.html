@@ -16,36 +16,11 @@
         background-repeat: repeat;
       }
       .center-img { display: block; margin-left: auto; margin-right: auto; max-width: 50%; height: auto; }
-      label {
-        display: inline-block;
-        width: 280px;
-        margin-right: -10px;
-        font-weight: bold;
-        vertical-align: middle;
-        text-align: left;
-      }
-      input, textarea {
-        display: inline-block;
-        width: 30%;
-        padding: 5px;
-        box-sizing: border-box;
-        vertical-align: middle;
-      }
-      .form-row {
-        display: flex;
-        align-items: center;
-        gap: 8px;
-        margin: 12px 0;
-        flex-wrap: wrap;
-      }
+      label { display: inline-block; width: 280px; margin-right: -10px; font-weight: bold; vertical-align: middle; text-align: left; }
+      input, textarea { display: inline-block; width: 30%; padding: 5px; box-sizing: border-box; vertical-align: middle; }
+      .form-row { display: flex; align-items: center; gap: 8px; margin: 12px 0; flex-wrap: wrap; }
       .place-row label { flex: 0 0 auto; font-weight: bold; white-space: nowrap; }
-      .place-row textarea {
-        flex: 1 1 20px;
-        min-width: 10px;
-        padding: 6px 8px;
-        border: 1px solid #999;
-        border-radius: 4px;
-      }
+      .place-row textarea { flex: 1 1 20px; min-width: 10px; padding: 6px 8px; border: 1px solid #999; border-radius: 4px; }
       @media (max-width: 500px) {
         .form-row { flex-direction: column; align-items: flex-start; gap: 6px; }
         .place-row input { width: 30%; }
@@ -95,15 +70,9 @@
     </div>
     <div id="results"></div>
 
-    <!--
-      KEY FIXES vs previous versions:
-      1. type="module" on the script tag  — Harper.js is an ES module, this is required
-      2. Import from the versioned .js file — NOT harper.umd.cjs, NOT @latest
-      3. No global `harper` object needed  — import gives us the names directly
-      4. Linter created once at module load — not inside the click handler
-    -->
     <script type="module">
-      import { binaryInlined, WorkerLinter } from 'https://unpkg.com/harper.js@0.54.0/dist/harper.js';
+      // Pinned to 1.2.0 (latest as of now) — change version here if you upgrade
+      import { binaryInlined, WorkerLinter } from 'https://unpkg.com/harper.js@1.2.0/dist/harper.js';
 
       const linter = new WorkerLinter({ binary: binaryInlined });
 
@@ -134,25 +103,35 @@
         const fullText = fields.join('\n\n');
 
         try {
-          const issues = await linter.lint(fullText);
+          const lints = await linter.lint(fullText);
 
           btn.disabled = false;
           btn.textContent = 'Submit';
 
-          if (issues.length === 0) {
+          if (lints.length === 0) {
             resultsDiv.innerHTML = '<p style="color:green;font-weight:bold;">✅ Perfect! No grammar issues found.</p>';
             return;
           }
 
-          let html = `<p><strong>Harper found ${issues.length} issue(s):</strong></p><ul>`;
-          for (const issue of issues) {
-            const snippet = fullText.substring(issue.span.start, issue.span.end);
-            const suggestions = issue.suggestions?.length
-              ? issue.suggestions.map(s => `<strong>${s.value}</strong>`).join(' or ')
-              : 'No suggestion available';
+          let html = `<p><strong>Harper found ${lints.length} issue(s):</strong></p><ul>`;
+          for (const lint of lints) {
+            // v1.x API: message() and span() are METHODS, not properties
+            const span = lint.span();
+            const snippet = fullText.substring(span.start, span.end);
+            const message = lint.message();
+
+            // suggestions() returns an array of suggestion objects with a .value property
+            let suggestionText = 'No suggestion available';
+            try {
+              const sugs = lint.suggestions();
+              if (sugs && sugs.length > 0) {
+                suggestionText = sugs.map(s => `<strong>${s.value ?? s}</strong>`).join(' or ');
+              }
+            } catch (_) {}
+
             html += `<li>
-              <span class="error">"${snippet}"</span> → ${suggestions}<br>
-              <small>${issue.message}</small>
+              <span class="error">"${snippet}"</span> → ${suggestionText}<br>
+              <small>${message}</small>
             </li>`;
           }
           html += '</ul>';
@@ -161,7 +140,7 @@
         } catch (err) {
           btn.disabled = false;
           btn.textContent = 'Submit';
-          resultsDiv.innerHTML = `<p class="error">Harper failed to load. Try refreshing. (${err.message})</p>`;
+          resultsDiv.innerHTML = `<p class="error">Error: ${err.message}</p><p>Check the browser console (F12) for details.</p>`;
           console.error('Harper error:', err);
         }
       }
