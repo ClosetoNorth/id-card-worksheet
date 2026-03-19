@@ -115,17 +115,25 @@
 
           let html = `<p><strong>Harper found ${lints.length} issue(s):</strong></p><ul>`;
           for (const lint of lints) {
-            // v1.x API: message() and span() are METHODS, not properties
             const span = lint.span();
             const snippet = fullText.substring(span.start, span.end);
             const message = lint.message();
 
-            // suggestions() returns an array of suggestion objects with a .value property
+            // Use applySuggestion() to get the corrected replacement text
             let suggestionText = 'No suggestion available';
             try {
               const sugs = lint.suggestions();
               if (sugs && sugs.length > 0) {
-                suggestionText = sugs.map(s => `<strong>${s.value ?? s}</strong>`).join(' or ');
+                const corrected = await Promise.all(
+                  sugs.map(s => linter.applySuggestion(fullText, lint, s))
+                );
+                // applySuggestion returns the full corrected text — extract just the changed word
+                suggestionText = corrected
+                  .map(fixed => {
+                    const fixedSnippet = fixed.substring(span.start, span.end + (fixed.length - fullText.length));
+                    return `<strong>${fixedSnippet || fixed}</strong>`;
+                  })
+                  .join(' or ');
               }
             } catch (_) {}
 
