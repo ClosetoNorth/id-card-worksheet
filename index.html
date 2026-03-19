@@ -91,15 +91,21 @@
         </label>
       </div>
 
-      <button id="submitBtn" onclick="checkGrammar()">Submit</button>
+      <button id="submitBtn">Submit</button>
     </div>
     <div id="results"></div>
 
-    <!-- ✅ Load Harper.js as a UMD script (NOT ES module import) -->
-    <script src="https://unpkg.com/harper.js@latest/dist/harper.umd.cjs"></script>
+    <!--
+      KEY FIXES vs previous versions:
+      1. type="module" on the script tag  — Harper.js is an ES module, this is required
+      2. Import from the versioned .js file — NOT harper.umd.cjs, NOT @latest
+      3. No global `harper` object needed  — import gives us the names directly
+      4. Linter created once at module load — not inside the click handler
+    -->
+    <script type="module">
+      import { binaryInlined, WorkerLinter } from 'https://unpkg.com/harper.js@0.54.0/dist/harper.js';
 
-    <script>
-      let linter = null;
+      const linter = new WorkerLinter({ binary: binaryInlined });
 
       async function checkGrammar() {
         const btn = document.getElementById('submitBtn');
@@ -110,13 +116,13 @@
         resultsDiv.innerHTML = '<p>Checking grammar with Harper...</p>';
 
         const fields = [
-          'My name is '         + (document.getElementById('name').value.trim()),
-          'I am from '          + (document.getElementById('country').value.trim()),
-          'I am '               + (document.getElementById('nationality').value.trim()),
-          'The famous food is ' + (document.getElementById('food').value.trim()),
-          (document.getElementById('place').value.trim())   + ' is a popular place.',
-          (document.getElementById('funfact').value.trim()) + ' is a sunny place.',
-        ].filter(s => s.trim().length > 20); // skip blank/near-empty fields
+          'My name is '         + document.getElementById('name').value.trim(),
+          'I am from '          + document.getElementById('country').value.trim(),
+          'I am '               + document.getElementById('nationality').value.trim(),
+          'The famous food is ' + document.getElementById('food').value.trim(),
+          document.getElementById('place').value.trim()   + ' is a popular place.',
+          document.getElementById('funfact').value.trim() + ' is a sunny place.',
+        ].filter(s => s.trim().length > 20);
 
         if (fields.length === 0) {
           resultsDiv.innerHTML = '<p class="error">Please fill in at least one field!</p>';
@@ -128,11 +134,6 @@
         const fullText = fields.join('\n\n');
 
         try {
-          if (!linter) {
-            // ✅ harper is available as a global from the UMD script above
-            linter = new harper.WorkerLinter({ binary: harper.binaryInlined });
-          }
-
           const issues = await linter.lint(fullText);
 
           btn.disabled = false;
@@ -164,6 +165,8 @@
           console.error('Harper error:', err);
         }
       }
+
+      document.getElementById('submitBtn').addEventListener('click', checkGrammar);
     </script>
   </body>
 </html>
