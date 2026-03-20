@@ -30,6 +30,7 @@
       button:disabled { background: #aaa; cursor: not-allowed; }
       #results { margin-top: 20px; padding: 15px; background: #fff3cd; border: 1px solid #ffeeba; border-radius: 5px; }
       .error { color: red; font-weight: bold; }
+      .ok { color: green; font-weight: bold; }
     </style>
   </head>
   <body>
@@ -70,11 +71,7 @@
     </div>
     <div id="results"></div>
 
-    <script type="module">
-      import { binaryInlined, WorkerLinter } from 'https://unpkg.com/harper.js@1.2.0/dist/harper.js';
-
-      const linter = new WorkerLinter({ binary: binaryInlined });
-
+    <script>
       function getValue(id) {
         return document.getElementById(id).value.trim();
       }
@@ -87,16 +84,20 @@
         btn.textContent = 'Checking...';
         resultsDiv.innerHTML = '<p>Checking grammar...</p>';
 
-        // Build sentences only for fields the user actually filled in.
-        // Filter checks the RAW user input (not the full sentence) so short names like "Ali" are kept.
+        // Build full sentences, skip fields the user left blank
         const fields = [
-          { input: getValue('name'),        sentence: 'My name is '         + getValue('name') },
-          { input: getValue('country'),     sentence: 'I am from '          + getValue('country') },
-          { input: getValue('nationality'), sentence: 'I am '               + getValue('nationality') },
-          { input: getValue('food'),        sentence: 'The famous food is ' + getValue('food') },
-          { input: getValue('place'),       sentence: getValue('place')      + ' is a popular place.' },
-          { input: getValue('funfact'),     sentence: getValue('funfact')    + ' is a sunny place.' },
-        ].filter(f => f.input.length > 0); // ✅ skip only truly empty fields
+          { label: 'Name',        sentence: 'My name is '         + getValue('name') },
+          { label: 'Country',     sentence: 'I am from '          + getValue('country') },
+          { label: 'Nationality', sentence: 'I am '               + getValue('nationality') },
+          { label: 'Food',        sentence: 'The famous food is '  + getValue('food') },
+          { label: 'Place',       sentence: getValue('place')      + ' is a popular place.' },
+          { label: 'Fun fact',    sentence: getValue('funfact')    + ' is a sunny place.' },
+        ].filter(f => {
+          // Only include if the user actually typed something (not just the prefix alone)
+          const prefixes = ['My name is ', 'I am from ', 'I am ', 'The famous food is ', ' is a popular place.', ' is a sunny place.'];
+          return f.sentence.trim().length > 0 &&
+                 !prefixes.some(p => f.sentence.trim() === p.trim());
+        });
 
         if (fields.length === 0) {
           resultsDiv.innerHTML = '<p class="error">Please fill in at least one field!</p>';
@@ -105,55 +106,55 @@
           return;
         }
 
-        const fullText = fields.map(f => f.sentence).join('\n\n');
+        // Check each sentence individually so we can label which field had the error
+        let anyErrors = false;
+        let html = '';
 
-        try {
-          const lints = await linter.lint(fullText);
+        for (const field of fields) {
+          try {
+            const params = new URLSearchParams({
+              text: field.sentence,
+              language: 'en-US',
+            });
 
-          btn.disabled = false;
-          btn.textContent = 'Submit';
+            const response = await fetch('https://api.languagetool.org/v2/check', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+              body: params.toString(),
+            });
 
-          if (lints.length === 0) {
-            resultsDiv.innerHTML = '<p style="color:green;font-weight:bold;">✅ Perfect! No grammar issues found.</p>';
-            return;
-          }
+            if (!response.ok) throw new Error('LanguageTool API error: ' + response.status);
 
-          let html = `<p><strong>${lints.length} grammar mistake(s) found:</strong></p><ul>`;
-          for (const lint of lints) {
-            const span = lint.span();
-            const snippet = fullText.substring(span.start, span.end);
-            const message = lint.message();
+            const data = await response.json();
+            const matches = data.matches;
 
-            let suggestionText = 'No suggestion available';
-            try {
-              const sugs = lint.suggestions();
-              if (sugs && sugs.length > 0) {
-                const corrected = await Promise.all(
-                  sugs.map(s => linter.applySuggestion(fullText, lint, s))
-                );
-                suggestionText = corrected
-                  .map(fixed => {
-                    const fixedSnippet = fixed.substring(span.start, span.end + (fixed.length - fullText.length));
-                    return `<strong>${fixedSnippet || fixed}</strong>`;
-                  })
-                  .join(' or ');
+            if (matches.length === 0) {
+              html += `<p class="ok">✅ <strong>${field.label}:</strong> "${field.sentence}" — looks good!</p>`;
+            } else {
+              anyErrors = true;
+              html += `<p><strong>❌ ${field.label}:</strong> "${field.sentence}"</p><ul>`;
+              for (const match of matches) {
+                const snippet = field.sentence.substring(match.offset, match.offset + match.length);
+                const suggestions = match.replacements.slice(0, 3).map(r => `<strong>${r.value}</strong>`).join(' or ');
+                html += `<li>
+                  <span class="error">"${snippet}"</span>${suggestions ? ' → ' + suggestions : ''}<br>
+                  <small>${match.message}</small>
+                </li>`;
               }
-            } catch (_) {}
-
-            html += `<li>
-              <span class="error">"${snippet}"</span> → ${suggestionText}<br>
-              <small>${message}</small>
-            </li>`;
+              html += '</ul>';
+            }
+          } catch (err) {
+            html += `<p class="error">Could not check <strong>${field.label}</strong>: ${err.message}</p>`;
           }
-          html += '</ul>';
-          resultsDiv.innerHTML = html;
-
-        } catch (err) {
-          btn.disabled = false;
-          btn.textContent = 'Submit';
-          resultsDiv.innerHTML = `<p class="error">Error: ${err.message}</p><p>Check the browser console (F12) for details.</p>`;
-          console.error('Harper error:', err);
         }
+
+        if (!anyErrors) {
+          html = '<p class="ok" style="font-size:1.1em;">🎉 Perfect! No grammar mistakes found.</p>' + html;
+        }
+
+        resultsDiv.innerHTML = html;
+        btn.disabled = false;
+        btn.textContent = 'Submit';
       }
 
       document.getElementById('submitBtn').addEventListener('click', checkGrammar);
