@@ -71,10 +71,13 @@
     <div id="results"></div>
 
     <script type="module">
-      // Pinned to 1.2.0 (latest as of now) — change version here if you upgrade
       import { binaryInlined, WorkerLinter } from 'https://unpkg.com/harper.js@1.2.0/dist/harper.js';
 
       const linter = new WorkerLinter({ binary: binaryInlined });
+
+      function getValue(id) {
+        return document.getElementById(id).value.trim();
+      }
 
       async function checkGrammar() {
         const btn = document.getElementById('submitBtn');
@@ -82,16 +85,18 @@
 
         btn.disabled = true;
         btn.textContent = 'Checking...';
-        resultsDiv.innerHTML = '<p>Checking grammar with Harper...</p>';
+        resultsDiv.innerHTML = '<p>Checking grammar...</p>';
 
+        // Build sentences only for fields the user actually filled in.
+        // Filter checks the RAW user input (not the full sentence) so short names like "Ali" are kept.
         const fields = [
-          'My name is '         + document.getElementById('name').value.trim(),
-          'I am from '          + document.getElementById('country').value.trim(),
-          'I am '               + document.getElementById('nationality').value.trim(),
-          'The famous food is ' + document.getElementById('food').value.trim(),
-          document.getElementById('place').value.trim()   + ' is a popular place.',
-          document.getElementById('funfact').value.trim() + ' is a sunny place.',
-        ].filter(s => s.trim().length > 20);
+          { input: getValue('name'),        sentence: 'My name is '         + getValue('name') },
+          { input: getValue('country'),     sentence: 'I am from '          + getValue('country') },
+          { input: getValue('nationality'), sentence: 'I am '               + getValue('nationality') },
+          { input: getValue('food'),        sentence: 'The famous food is ' + getValue('food') },
+          { input: getValue('place'),       sentence: getValue('place')      + ' is a popular place.' },
+          { input: getValue('funfact'),     sentence: getValue('funfact')    + ' is a sunny place.' },
+        ].filter(f => f.input.length > 0); // ✅ skip only truly empty fields
 
         if (fields.length === 0) {
           resultsDiv.innerHTML = '<p class="error">Please fill in at least one field!</p>';
@@ -100,7 +105,7 @@
           return;
         }
 
-        const fullText = fields.join('\n\n');
+        const fullText = fields.map(f => f.sentence).join('\n\n');
 
         try {
           const lints = await linter.lint(fullText);
@@ -113,13 +118,12 @@
             return;
           }
 
-          let html = `<p><strong>Harper found ${lints.length} issue(s):</strong></p><ul>`;
+          let html = `<p><strong>${lints.length} grammar mistake(s) found:</strong></p><ul>`;
           for (const lint of lints) {
             const span = lint.span();
             const snippet = fullText.substring(span.start, span.end);
             const message = lint.message();
 
-            // Use applySuggestion() to get the corrected replacement text
             let suggestionText = 'No suggestion available';
             try {
               const sugs = lint.suggestions();
@@ -127,7 +131,6 @@
                 const corrected = await Promise.all(
                   sugs.map(s => linter.applySuggestion(fullText, lint, s))
                 );
-                // applySuggestion returns the full corrected text — extract just the changed word
                 suggestionText = corrected
                   .map(fixed => {
                     const fixedSnippet = fixed.substring(span.start, span.end + (fixed.length - fullText.length));
